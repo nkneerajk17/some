@@ -3,196 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple To-Do App</title>
+    <title>Tailwind To-Do App</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Define Inter font globally */
         body {
-            font-family: Arial, sans-serif;
-            background: #f4f4f9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-
-        .todo-container {
-            background: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-            width: 350px;
-        }
-
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 16px;
-        }
-
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        li {
-            background: #f9f9f9;
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: 0.2s;
-        }
-
-        li:hover {
-            background: #e3f2fd;
-        }
-
-        .delete {
-            background: #ff4b5c;
-            border: none;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .delete:hover {
-            background: #ff1e3c;
+            font-family: 'Inter', sans-serif;
         }
     </style>
 </head>
-<body>
-    <div class="todo-container">
-        <h1>My To-Do List</h1>
-        <input type="text" placeholder="Add a task..." id="taskInput" onkeypress="if(event.key==='Enter'){addTask();}">
-        <ul id="taskList"></ul>
+<body class="h-screen flex items-center justify-center bg-gray-50">
+    <div class="todo-container bg-white p-6 md:p-10 rounded-xl shadow-2xl w-full max-w-md mx-4">
+        <h1 class="text-3xl font-extrabold text-gray-800 text-center mb-6">
+            <span class="text-blue-600">My</span> Task List
+        </h1>
+
+        <!-- Input for adding new tasks -->
+        <input 
+            type="text" 
+            placeholder="Add a new task..." 
+            id="taskInput" 
+            class="p-3 border border-gray-300 rounded-lg w-full mb-6 text-gray-700 focus:ring-blue-500 focus:border-blue-500 transition duration-150"
+            onkeypress="if(event.key==='Enter'){addTask();}"
+            aria-label="New task input"
+        >
+
+        <!-- List to display tasks -->
+        <ul id="taskList">
+            <!-- Tasks will be injected here -->
+        </ul>
     </div>
 
     <script>
-        function addTask() {<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple To-Do App</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f4f9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
+        // Global variables for Firebase access (required by the environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firebase imports (using module type for modern JS)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, onSnapshot, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase service instances
+        let app, db, auth, userId;
+        let isAuthReady = false;
+
+        /**
+         * Initializes Firebase and authenticates the user.
+         */
+        async function initializeFirebase() {
+            try {
+                // setLogLevel('debug');
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Sign in using the custom token provided by the environment, or anonymously if not available
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Wait for the auth state to be set
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                        // Once authenticated, start listening for data changes
+                        setupTaskListener(); 
+                        displayUserId();
+                    } else {
+                        // Fallback user ID for unauthenticated state (though we sign in anonymously above)
+                        userId = crypto.randomUUID(); 
+                        isAuthReady = true;
+                        setupTaskListener(); 
+                        displayUserId();
+                    }
+                });
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                // Fallback UI to inform the user if initialization fails
+                const taskList = document.getElementById('taskList');
+                taskList.innerHTML = '<li class="text-red-500">Error loading application. Check console for details.</li>';
+            }
         }
 
-        .todo-container {
-            background: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-            width: 350px;
+        /**
+         * Displays the current user ID for collaborative context.
+         */
+        function displayUserId() {
+            const container = document.querySelector('.todo-container');
+            let userIdDisplay = document.getElementById('userIdDisplay');
+            if (!userIdDisplay) {
+                userIdDisplay = document.createElement('p');
+                userIdDisplay.id = 'userIdDisplay';
+                userIdDisplay.className = 'text-xs text-gray-500 mt-4 break-words';
+                container.appendChild(userIdDisplay);
+            }
+            userIdDisplay.textContent = `User ID: ${userId}`;
         }
 
-        h1 {
-            text-align: center;
-            color: #333;
+        /**
+         * Converts Firestore snapshot data into an array of task objects.
+         * @param {object} querySnapshot - The Firestore snapshot result.
+         * @returns {Array<object>} - Array of task objects.
+         */
+        function snapshotToTasks(querySnapshot) {
+            const tasks = [];
+            querySnapshot.forEach(doc => {
+                tasks.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+            // Sort in memory by timestamp if needed (we'll rely on Firestore snapshot for simplicity)
+            return tasks;
         }
 
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 16px;
+        /**
+         * Sets up a real-time listener for the task collection in Firestore.
+         */
+        function setupTaskListener() {
+            if (!db || !isAuthReady) return;
+
+            // Using the public collection path for shared todo lists
+            const tasksRef = collection(db, `/artifacts/${appId}/public/data/tasks`);
+            const q = query(tasksRef);
+
+            onSnapshot(q, (querySnapshot) => {
+                const tasks = snapshotToTasks(querySnapshot);
+                renderTasks(tasks);
+            }, (error) => {
+                console.error("Error fetching tasks:", error);
+            });
         }
 
-        ul {
-            list-style: none;
-            padding: 0;
+        /**
+         * Renders the list of tasks to the DOM.
+         * @param {Array<object>} tasks - Array of task objects from Firestore.
+         */
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = ''; // Clear existing tasks
+
+            if (tasks.length === 0) {
+                taskList.innerHTML = '<li class="text-center text-gray-500 p-4">No tasks yet. Add one above!</li>';
+                return;
+            }
+            
+            tasks.forEach(task => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center bg-blue-50 p-3 rounded-lg mb-2 shadow-sm transition duration-150 ease-in-out hover:bg-blue-100';
+                
+                // Task Text
+                const taskTextSpan = document.createElement('span');
+                taskTextSpan.textContent = task.text;
+                taskTextSpan.className = 'flex-grow text-gray-700 font-medium';
+
+                // Delete Button
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-md transition duration-150 ml-4 shadow-md';
+                deleteButton.textContent = 'Delete';
+                deleteButton.onclick = () => deleteTask(task.id);
+
+                li.appendChild(taskTextSpan);
+                li.appendChild(deleteButton);
+                taskList.appendChild(li);
+            });
         }
 
-        li {
-            background: #f9f9f9;
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: 0.2s;
-        }
-
-        li:hover {
-            background: #e3f2fd;
-        }
-
-        .delete {
-            background: #ff4b5c;
-            border: none;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .delete:hover {
-            background: #ff1e3c;
-        }
-    </style>
-</head>
-<body>
-    <div class="todo-container">
-        <h1>My To-Do List</h1>
-        <input type="text" placeholder="Add a task..." id="taskInput" onkeypress="if(event.key==='Enter'){addTask();}">
-        <ul id="taskList"></ul>
-    </div>
-
-    <script>
-        function addTask() {
+        /**
+         * Adds a new task to Firestore.
+         */
+        async function addTask() {
             const input = document.getElementById('taskInput');
             const taskText = input.value.trim();
-            if(taskText === '') return;
 
-            const li = document.createElement('li');
-            li.innerHTML = `${taskText} <button class="delete" onclick="deleteTask(this)">Delete</button>`;
-            document.getElementById('taskList').appendChild(li);
-            input.value = '';
+            if (taskText === '') return;
+            if (!db || !isAuthReady) {
+                console.error("Firebase not initialized or authenticated yet.");
+                return;
+            }
+
+            try {
+                const tasksRef = collection(db, `/artifacts/${appId}/public/data/tasks`);
+                await addDoc(tasksRef, {
+                    text: taskText,
+                    createdAt: Date.now(),
+                    ownerId: userId // Optional: track who added the task
+                });
+                input.value = ''; // Clear input on success
+            } catch (error) {
+                console.error("Error adding document: ", error);
+            }
         }
 
-        function deleteTask(button) {
-            const li = button.parentElement;
-            li.remove();
+        /**
+         * Deletes a task from Firestore.
+         * @param {string} taskId - The ID of the document to delete.
+         */
+        async function deleteTask(taskId) {
+            if (!db || !isAuthReady) {
+                console.error("Firebase not initialized or authenticated yet.");
+                return;
+            }
+            try {
+                const docRef = doc(db, `/artifacts/${appId}/public/data/tasks`, taskId);
+                await deleteDoc(docRef);
+            } catch (error) {
+                console.error("Error removing document: ", error);
+            }
         }
-    </script>
-</body>
-</html>
 
-            const input = document.getElementById('taskInput');
-            const taskText = input.value.trim();
-            if(taskText === '') return;
+        // Start initialization when the window loads
+        window.onload = initializeFirebase;
 
-            const li = document.createElement('li');
-            li.innerHTML = `${taskText} <button class="delete" onclick="deleteTask(this)">Delete</button>`;
-            document.getElementById('taskList').appendChild(li);
-            input.value = '';
-        }
-
-        function deleteTask(button) {
-            const li = button.parentElement;
-            li.remove();
-        }
     </script>
 </body>
 </html>
